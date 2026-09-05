@@ -1,0 +1,4 @@
+.env
+venv
+test-sample-repo
+__pycache__
