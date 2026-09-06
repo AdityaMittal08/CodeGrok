@@ -1,13 +1,21 @@
-import os
+from pathlib import Path
 
 EXCLUDED_DIRS = {'node_modules', 'dist', 'build', 'coverage', '.git', '.next', 'out'}
 VALID_EXTENSIONS = ('.js', '.jsx', '.ts', '.tsx')
 
-def walk_dir(root_dir: str) -> list[str]:
+def walk_dir(root_path: str) -> list[str]:
+    path = Path(root_path).expanduser().resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"Repository path does not exist: {root_path}")
+
+    if path.is_file():
+        return [str(path)] if path.suffix.lower() in VALID_EXTENSIONS else []
+
     file_list = []
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS and not d.startswith('.')]
-        for f in filenames:
-            if f.endswith(VALID_EXTENSIONS):
-                file_list.append(os.path.join(dirpath, f))
+    for file_path in path.rglob('*'):
+        if not file_path.is_file() or file_path.suffix.lower() not in VALID_EXTENSIONS:
+            continue
+        if any(part in EXCLUDED_DIRS or part.startswith('.') for part in file_path.relative_to(path).parts[:-1]):
+            continue
+        file_list.append(str(file_path))
     return file_list

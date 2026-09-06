@@ -55,7 +55,12 @@ def ingest_repo(repo_path: str, repo_name: str) -> dict:
         conn.commit()
         cur.close()
         conn.close()
-        return {"repo_id": repo_id, "total_chunks": 0}
+        return {
+            "repo_id": repo_id,
+            "repo_path": repo_path,
+            "files_scanned": len(files),
+            "total_chunks": 0,
+        }
 
     # Step 2: embed all chunks in batches (much faster than one at a time)
 
@@ -94,4 +99,9 @@ def ingest_repo(repo_path: str, repo_name: str) -> dict:
 
     total_chunks = len(all_chunks)
     print(f"Ingested {total_chunks} chunks from {len(files)} files")
-    return {"repo_id": repo_id, "total_chunks": total_chunks}
+    return {
+        "repo_id": repo_id,
+        "repo_path": repo_path,
+        "files_scanned": len(files),
+        "total_chunks": total_chunks,
+    }
