@@ -119,7 +119,7 @@ function TypeBadge({ type }: { type: SearchResult["ast_type"] }) {
 function BrandMark({ small = false }: { small?: boolean }) {
   return (
     <div className={cn("brand-mark", small && "brand-mark--small")} aria-hidden="true">
-      <img src="/manus-storage/codegrok-mark_5183eccc.png" alt="" />
+      <span className="brand-mark__glyph">{"{}"}</span>
     </div>
   );
 }
@@ -302,9 +302,12 @@ function SearchPanel({
   );
 }
 
-function ResultCard({ result, index }: { result: SearchResult; index: number }) {
+function ResultCard({ result, query, index, canExplain }: { result: SearchResult; query: string; index: number; canExplain: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanationError, setExplanationError] = useState(false);
   const codeLines = result.code_text.split(/\r?\n/);
   const shouldCollapse = codeLines.length > 7;
   const displayedCode = expanded || !shouldCollapse ? result.code_text : codeLines.slice(0, 7).join("\n");
@@ -319,6 +322,30 @@ function ResultCard({ result, index }: { result: SearchResult; index: number }) 
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       setCopied(false);
+    }
+  };
+
+  const explainMatch = async () => {
+    if (explanation || explanationLoading) return;
+    setExplanationLoading(true);
+    setExplanationError(false);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60_000);
+    try {
+      const response = await fetch(`${API_BASE}/api/explain`, {
+        method: "POST",
+        headers: API_HEADERS,
+        signal: controller.signal,
+        body: JSON.stringify({ query, code_text: result.code_text, function_name: result.function_name, similarity: result.similarity }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || typeof payload.explanation !== "string" || !payload.explanation.trim()) throw new Error("Explanation unavailable");
+      setExplanation(payload.explanation.trim());
+    } catch {
+      setExplanationError(true);
+    } finally {
+      window.clearTimeout(timeout);
+      setExplanationLoading(false);
     }
   };
 
@@ -338,13 +365,18 @@ function ResultCard({ result, index }: { result: SearchResult; index: number }) 
         <div className="result-card__footer">
           <div className="confidence-readout"><div className="confidence-readout__label"><span>SEMANTIC MATCH</span><strong>{formatScore(result.similarity)}</strong></div><div className="confidence-track"><span style={{ width: `${scoreWidth}%` }} /></div></div>
           <span className="confidence-note">{result.similarity >= 0.58 ? "strong signal" : result.similarity >= 0.45 ? "useful lead" : "weak signal"}</span>
+          {canExplain && <button type="button" className="explain-button" onClick={explainMatch} disabled={explanationLoading || Boolean(explanation)} aria-expanded={Boolean(explanation)}>
+            {explanationLoading ? <><LoaderCircle className="spin" size={13} /> EXPLAINING…</> : explanation ? "EXPLANATION SHOWN" : "EXPLAIN THIS CODE"}
+          </button>}
         </div>
+        {explanation && <div className="match-explanation"><span className="match-explanation__label">CODE EXPLANATION</span><p>{explanation}</p></div>}
+        {explanationError && <div className="match-explanation match-explanation--error"><span>Explanation unavailable right now.</span></div>}
       </div>
     </article>
   );
 }
 
-function ResultsPanel({ results, hasSearched, isSearching, isIndexed, isPreview, error }: { results: SearchResult[]; hasSearched: boolean; isSearching: boolean; isIndexed: boolean; isPreview: boolean; error: string | null }) {
+function ResultsPanel({ results, query, hasSearched, isSearching, isIndexed, isPreview, error }: { results: SearchResult[]; query: string; hasSearched: boolean; isSearching: boolean; isIndexed: boolean; isPreview: boolean; error: string | null }) {
   if (!isIndexed) {
     return <section className="results-panel results-panel--empty"><div className="empty-grid" /><div className="empty-icon"><BrandMark small /></div><div className="section-eyebrow"><span className="eyebrow-index">03</span> RANKED RESULTS</div><h2>Your code, <em>decoded.</em></h2><p>Search results will arrive here with confidence scores, syntax-highlighted context, and the exact file path your team needs.</p><div className="empty-preview-stack"><div className="empty-preview-strip"><span><FileCode2 size={13} /> src/validators/email.ts</span><span className="empty-preview-tag">FUNCTION</span></div><div className="empty-preview-code"><span>01</span><i>export function <b>isValidEmail</b>(value: string) {'{'}</i></div><div className="empty-preview-readout"><span>SEMANTIC MATCH</span><span className="empty-preview-bar"><i /></span><strong>0.61</strong></div></div><div className="empty-rule"><span>NO INDEX / NO SIGNAL</span><span>AWAITING INPUT</span></div></section>;
   }
@@ -352,7 +384,7 @@ function ResultsPanel({ results, hasSearched, isSearching, isIndexed, isPreview,
     {error && <div className="search-error"><TriangleAlert size={18} /><span>{error}</span></div>}
     {isSearching && <div className="results-loading"><LoaderCircle className="spin" size={20} /><span>Comparing intent against the indexed codebase…</span></div>}
     {!isSearching && results.length === 0 && <div className="no-results"><div className="no-results__mark">∅</div><h3>No strong signal yet.</h3><p>Try a broader description, or ask for the behavior rather than the implementation detail.</p></div>}
-    {!isSearching && results.length > 0 && <div className="results-list">{results.map((result, index) => <ResultCard key={result.id} result={result} index={index} />)}</div>}
+    {!isSearching && results.length > 0 && <div className="results-list">{results.map((result, index) => <ResultCard key={result.id} result={result} query={query} index={index} canExplain={index < 3} />)}</div>}
   </section>;
 }
 
@@ -471,7 +503,7 @@ export default function Home() {
             <IngestPanel repoPath={repoPath} repoName={repoName} setRepoPath={setRepoPath} setRepoName={setRepoName} ingestState={ingestState} notice={ingestNotice} totalChunks={totalChunks} onSubmit={handleIngest} />
             <SearchPanel query={query} setQuery={(value) => { setQuery(value); if (!value) setIsPreview(false); }} filter={filter} setFilter={(value) => { setFilter(value); setIsPreview(false); }} isIndexed={isIndexed} isSearching={isSearching} onSubmit={handleSearch} onExample={handleExample} />
           </div>
-          <ResultsPanel results={visibleResults} hasSearched={hasSearched} isSearching={isSearching} isIndexed={isIndexed} isPreview={isPreview} error={searchError} />
+          <ResultsPanel results={visibleResults} query={query} hasSearched={hasSearched} isSearching={isSearching} isIndexed={isIndexed} isPreview={isPreview} error={searchError} />
           <footer className="workspace-footer"><span><span className="footer-mark">⌁</span> CODEGROK / SEMANTIC INFRASTRUCTURE</span><span>BUILT FOR THE MOMENT BEFORE YOU KNOW THE FILE NAME</span><span>LOCAL-FIRST · FASTAPI · VECTOR SEARCH</span></footer>
         </main>
       </div>
