@@ -10,7 +10,8 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     astType: Optional[Literal["function_declaration", "method_definition", "arrow_function"]] = None
     limit: int = Field(default=10, ge=1, le=50)
+    repoId: Optional[int] = Field(default=None, ge=1)
 
 @router.post("/api/search")
 def search(req: SearchRequest, _: None = Depends(require_api_key)):
-    return search_chunks(req.query, req.astType, req.limit)
+    return search_chunks(req.query, req.astType, req.limit, req.repoId)

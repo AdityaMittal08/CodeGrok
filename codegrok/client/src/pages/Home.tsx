@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
@@ -193,7 +194,15 @@ function SideRail({ activeView, onNavigate, isIndexed }: { activeView: "search" 
 }
 
 function IngestPanel({
+  ingestMode,
+  setIngestMode,
   repoPath,
+  githubUrl,
+  setGithubUrl,
+  snippetCode,
+  setSnippetCode,
+  snippetLanguage,
+  setSnippetLanguage,
   repoName,
   setRepoPath,
   setRepoName,
@@ -202,7 +211,15 @@ function IngestPanel({
   totalChunks,
   onSubmit,
 }: {
+  ingestMode: "path" | "snippet" | "github";
+  setIngestMode: (value: "path" | "snippet" | "github") => void;
   repoPath: string;
+  githubUrl: string;
+  setGithubUrl: (value: string) => void;
+  snippetCode: string;
+  setSnippetCode: (value: string) => void;
+  snippetLanguage: "javascript" | "typescript" | "tsx";
+  setSnippetLanguage: (value: "javascript" | "typescript" | "tsx") => void;
   repoName: string;
   setRepoPath: (value: string) => void;
   setRepoName: (value: string) => void;
@@ -225,17 +242,41 @@ function IngestPanel({
         <div className="ingest-orbit" aria-hidden="true"><div className="orbit-ring orbit-ring--one" /><div className="orbit-ring orbit-ring--two" /><span>AST<br />→<br />VECTOR</span></div>
       </div>
 
+      <div className="filter-pills ingest-mode-toggle" role="tablist" aria-label="Index source">
+        <button type="button" role="tab" aria-selected={ingestMode === "path"} className={cn("filter-pill", ingestMode === "path" && "filter-pill--active")} onClick={() => setIngestMode("path")} disabled={isLoading}>FROM REPOSITORY PATH</button>
+        <button type="button" role="tab" aria-selected={ingestMode === "snippet"} className={cn("filter-pill", ingestMode === "snippet" && "filter-pill--active")} onClick={() => setIngestMode("snippet")} disabled={isLoading}>PASTE CODE</button>
+        <button type="button" role="tab" aria-selected={ingestMode === "github"} className={cn("filter-pill", ingestMode === "github" && "filter-pill--active")} onClick={() => setIngestMode("github")} disabled={isLoading}>FROM GITHUB URL</button>
+      </div>
+
       <form onSubmit={onSubmit} className="ingest-form">
-        <label className="field-label" htmlFor="repoPath">REPOSITORY PATH <span>LOCAL FS</span></label>
-        <div className="field-shell"><FolderTree size={17} /><Input id="repoPath" value={repoPath} onChange={(event) => setRepoPath(event.target.value)} placeholder="/Users/you/projects/my-repo" disabled={isLoading} /></div>
+        {ingestMode === "path" ? <>
+          <label className="field-label" htmlFor="repoPath">REPOSITORY PATH <span>LOCAL FS</span></label>
+          <div className="field-shell"><FolderTree size={17} /><Input id="repoPath" value={repoPath} onChange={(event) => setRepoPath(event.target.value)} placeholder="/Users/you/projects/my-repo" disabled={isLoading} /></div>
+        </> : ingestMode === "github" ? <>
+          <label className="field-label" htmlFor="githubUrl">GITHUB REPOSITORY URL <span>PUBLIC REPO</span></label>
+          <div className="field-shell"><Github size={17} /><Input id="githubUrl" type="url" value={githubUrl} onChange={(event) => setGithubUrl(event.target.value)} placeholder="https://github.com/owner/repo" disabled={isLoading} /></div>
+        </> : <>
+          <label className="field-label" htmlFor="snippetLanguage">LANGUAGE <span>AST PARSER</span></label>
+          <div className="field-shell"><Code2 size={17} /><select id="snippetLanguage" value={snippetLanguage} onChange={(event) => setSnippetLanguage(event.target.value as "javascript" | "typescript" | "tsx")} disabled={isLoading}><option value="javascript">JavaScript</option><option value="typescript">TypeScript</option><option value="tsx">TSX</option></select></div>
+          <label className="field-label" htmlFor="snippetCode">PASTE SOURCE <span>IN-MEMORY</span></label>
+          <div className="snippet-shell">
+            <Textarea
+              id="snippetCode"
+              value={snippetCode}
+              onChange={(event) => setSnippetCode(event.target.value)}
+              placeholder="Paste a function or module here…"
+              disabled={isLoading}
+            />
+          </div>
+        </>}
         <label className="field-label" htmlFor="repoName">DISPLAY NAME <span>OPTIONAL HANDLE</span></label>
         <div className="field-shell"><Code2 size={17} /><Input id="repoName" value={repoName} onChange={(event) => setRepoName(event.target.value)} placeholder="my-repo" disabled={isLoading} /></div>
-        <Button type="submit" className="index-button" disabled={isLoading || !repoPath.trim()}>
-          {isLoading ? <><LoaderCircle className="spin" size={17} /> INDEXING REPOSITORY…</> : <><Zap size={17} /> INDEX REPOSITORY <ArrowUpRight size={16} /></>}
+        <Button type="submit" className="index-button" disabled={isLoading || (ingestMode === "path" ? !repoPath.trim() : ingestMode === "github" ? !githubUrl.trim() : !snippetCode.trim())}>
+          {isLoading ? <><LoaderCircle className="spin" size={17} /> {ingestMode === "github" ? "CLONING & INDEXING…" : "INDEXING REPOSITORY…"}</> : <><Zap size={17} /> INDEX REPOSITORY <ArrowUpRight size={16} /></>}
         </Button>
       </form>
 
-      {isLoading && <div className="index-progress"><div className="index-progress__top"><span><span className="live-dot" /> Indexing repository…</span><span>usually 30 sec – 3 min</span></div><div className="index-progress__track"><span /></div><div className="index-progress__note">Parsing functions and methods · generating semantic embeddings · storing vectors</div></div>}
+      {isLoading && <div className="index-progress"><div className="index-progress__top"><span><span className="live-dot" /> {ingestMode === "github" ? "Cloning and indexing repository — this may take a minute" : "Indexing repository…"}</span><span>usually 30 sec – 3 min</span></div><div className="index-progress__track"><span /></div><div className="index-progress__note">Parsing functions and methods · generating semantic embeddings · storing vectors</div></div>}
       {notice?.tone === "success" && <div className="notice notice--success"><Check size={17} /><div><strong>Repository indexed.</strong><span>{totalChunks?.toLocaleString()} semantic chunks are ready to search.</span></div></div>}
       {notice?.tone === "error" && <div className="notice notice--error"><TriangleAlert size={17} /><div><strong>Indexing paused.</strong><span>{notice.message}</span></div></div>}
     </section>
@@ -391,11 +432,16 @@ function ResultsPanel({ results, query, hasSearched, isSearching, isIndexed, isP
 export default function Home() {
   const [activeView, setActiveView] = useState<"search" | "ingest">("ingest");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [ingestMode, setIngestMode] = useState<"path" | "snippet" | "github">("path");
   const [repoPath, setRepoPath] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [snippetCode, setSnippetCode] = useState("");
+  const [snippetLanguage, setSnippetLanguage] = useState<"javascript" | "typescript" | "tsx">("typescript");
   const [repoName, setRepoName] = useState("");
   const [ingestState, setIngestState] = useState<IngestState>("idle");
   const [ingestNotice, setIngestNotice] = useState<Notice>(null);
   const [totalChunks, setTotalChunks] = useState<number | null>(null);
+  const [indexedRepoId, setIndexedRepoId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AstType>("all");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -436,14 +482,36 @@ export default function Home() {
 
   const handleIngest = async (event: FormEvent) => {
     event.preventDefault();
-    if (!repoPath.trim()) return;
+    const isSnippet = ingestMode === "snippet";
+    const isGitHub = ingestMode === "github";
+    if (isSnippet ? !snippetCode.trim() : isGitHub ? !githubUrl.trim() : !repoPath.trim()) return;
     setIngestState("loading");
     setIngestNotice(null);
     setSearchError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/ingest`, { method: "POST", headers: API_HEADERS, body: JSON.stringify({ repoPath: repoPath.trim(), repoName: repoName.trim() || repoPath.split("/").filter(Boolean).pop() || "repository" }) });
+      const body = isSnippet
+        ? { code: snippetCode, language: snippetLanguage, repoName: repoName.trim() || "pasted-snippet" }
+        : isGitHub
+          ? { repoUrl: githubUrl.trim(), repoName: repoName.trim() || undefined }
+        : { repoPath: repoPath.trim(), repoName: repoName.trim() || repoPath.split("/").filter(Boolean).pop() || "repository" };
+      const response = await fetch(`${API_BASE}/api/ingest${isSnippet ? "/snippet" : isGitHub ? "/github" : ""}`, { method: "POST", headers: API_HEADERS, body: JSON.stringify(body) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.detail || "The backend could not index this repository.");
+      if (isGitHub) {
+        const repoId = payload.repo_id;
+        while (true) {
+          await new Promise((resolve) => window.setTimeout(resolve, 3000));
+          const statusResponse = await fetch(`${API_BASE}/api/repos/${repoId}/status`, { headers: API_HEADERS });
+          const statusPayload = await statusResponse.json().catch(() => ({}));
+          if (!statusResponse.ok) throw new Error(statusPayload.detail || "Could not check repository indexing status.");
+          if (statusPayload.status === "ready") {
+            payload.total_chunks = statusPayload.total_chunks ?? 0;
+            break;
+          }
+          if (statusPayload.status === "failed") throw new Error(statusPayload.detail || "GitHub repository indexing failed.");
+        }
+      }
+      setIndexedRepoId(payload.repo_id);
       setTotalChunks(payload.total_chunks ?? 0);
       setIngestState("success");
       setIngestNotice({ tone: "success", message: "ready" });
@@ -463,7 +531,7 @@ export default function Home() {
     setSearchError(null);
     setIsPreview(false);
     try {
-      const response = await fetch(`${API_BASE}/api/search`, { method: "POST", headers: API_HEADERS, body: JSON.stringify({ query: query.trim(), astType: filter === "all" ? null : filter, limit: 10 }) });
+      const response = await fetch(`${API_BASE}/api/search`, { method: "POST", headers: API_HEADERS, body: JSON.stringify({ query: query.trim(), astType: filter === "all" ? null : filter, limit: 10, repoId: indexedRepoId }) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.detail || "The semantic search request failed.");
       setResults(Array.isArray(payload) ? payload : []);
@@ -500,7 +568,7 @@ export default function Home() {
         <main className="workspace">
           <div className="workspace__intro"><span className="workspace__index">WORKSPACE / 001</span><span className="workspace__rule" /><span className="workspace__hint">NATURAL LANGUAGE → SOURCE</span></div>
           <div className="workspace-grid">
-            <IngestPanel repoPath={repoPath} repoName={repoName} setRepoPath={setRepoPath} setRepoName={setRepoName} ingestState={ingestState} notice={ingestNotice} totalChunks={totalChunks} onSubmit={handleIngest} />
+            <IngestPanel ingestMode={ingestMode} setIngestMode={setIngestMode} repoPath={repoPath} githubUrl={githubUrl} setGithubUrl={setGithubUrl} snippetCode={snippetCode} setSnippetCode={setSnippetCode} snippetLanguage={snippetLanguage} setSnippetLanguage={setSnippetLanguage} repoName={repoName} setRepoPath={setRepoPath} setRepoName={setRepoName} ingestState={ingestState} notice={ingestNotice} totalChunks={totalChunks} onSubmit={handleIngest} />
             <SearchPanel query={query} setQuery={(value) => { setQuery(value); if (!value) setIsPreview(false); }} filter={filter} setFilter={(value) => { setFilter(value); setIsPreview(false); }} isIndexed={isIndexed} isSearching={isSearching} onSubmit={handleSearch} onExample={handleExample} />
           </div>
           <ResultsPanel results={visibleResults} query={query} hasSearched={hasSearched} isSearching={isSearching} isIndexed={isIndexed} isPreview={isPreview} error={searchError} />

@@ -1,9 +1,30 @@
 CREATE TABLE IF NOT EXISTS repos (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   source_path TEXT,
-  ingested_at TIMESTAMP DEFAULT now()
+  ingested_at TIMESTAMP DEFAULT now(),
+  status TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('pending', 'ready', 'failed')),
+  failure_message TEXT
 );
+
+-- Supports databases created before GitHub ingestion was added.
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ready';
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS failure_message TEXT;
+
+-- Supports databases created before repository names were made unique.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'repos'::regclass
+      AND contype = 'u'
+      AND conname = 'repos_name_key'
+  ) THEN
+    ALTER TABLE repos ADD CONSTRAINT repos_name_key UNIQUE (name);
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS chunks (
   id SERIAL PRIMARY KEY,
